@@ -1,10 +1,15 @@
 import csv
+import sys
+csv.field_size_limit(sys.maxsize)
 import json
 res= {"type": "FeatureCollection", "features": []}
 f = open('data.csv', newline='')
 reader = csv.DictReader(f)
 for line in reader:
-    coordsSplit = line["Section_Coordinates"].split(',')
+    try:
+       coordsSplit = line["Section_Coordinates"].split(',')
+    except:
+       continue
     coords = [[float(coordsSplit[i]), float(coordsSplit[i+1])] for i in range(0,len(coordsSplit) -1, 2)]
     feature = {"type": "Feature", "geometry": {"type": "Point", "coordinates": coords[-1]}, "properties": {"Location": line["Trip_Arrival_Display_Name"], "Date": line["Trip_End_Date"]}}
     res["features"].append(feature)

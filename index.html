@@ -1,0 +1,88 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.0/papaparse.min.js" integrity="sha512-BLtgHExslovxU1AJD+h/x7c8GGLvTTYe1evotrEkUDj0vTKRz6f4XAvziWO/7ykOfTnHvNWmx0vn14j8NlYuBg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    </head>
+    <body>
+        Upload csv ici: <input type="file" id="input" />, Superposés ? <input type="checkbox" id="overlay" />
+        <div id="map" style="height: 500px; visibility: hidden;"></div>
+        <form onsubmit="download()" style="visibility: hidden" id="download">
+            <input type="submit" value="Download last geoJSON">
+        </form>
+        <script>
+            function getRandomColor() {
+                var letters = '0123456789ABCDEF';
+                var color = '#';
+                for (var i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+            var map = L.map('map').setView([48, 2], 5);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            function onEachFeature(feature, layer) {
+                layer.bindPopup(JSON.stringify(feature.properties));
+            }
+
+            const inputElement = document.getElementById("input");
+            inputElement.addEventListener("change", handleFiles, false);
+            let last_layer = null;
+            let last_geojson = "";
+            function handleFiles() {
+                const files = this.files;
+                files[0].text().then(data => {
+                    var results = Papa.parse(data, {
+                        header: true,
+                        dynamicTyping: true
+                    });
+                    geojson = {type: "FeatureCollection", features: []}
+                    for (let i = 0; i < results.data.length; i++) {
+                        const entry = results.data[i];
+                        const coordsSplit = entry["Section_Coordinates"].split(",")
+                        let coords = [];
+                        for (let j = 0; j < coordsSplit.length; j+=2) {
+                            coords.push([parseFloat(coordsSplit[j]), parseFloat(coordsSplit[j+1])]);
+                        }
+                        let feature = {"type": "Feature", "geometry": {"type": "Point", "coordinates": coords[coords.length - 1]}, "properties": {"Location": entry["Trip_Arrival_Display_Name"], "Date": entry["Trip_End_Date"]}}
+                        geojson["features"].push(feature)
+                        feature = {"type": "Feature", "geometry": {"type": "Point", "coordinates": coords[0]}, "properties": {"Location": entry["Trip_Start_Display_Name"], "Date": entry["Trip_Start_Date"], "start": true}}
+                        geojson["features"].push(feature)
+                        feature = {"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords}, "properties": {...entry, Section_Coordinates: ""}}
+                        geojson["features"].push(feature)
+                    }
+                    last_geojson = JSON.stringify(geojson);
+                    document.getElementById("map").style.visibility = "visible";
+                    document.getElementById("download").style.visibility = "visible";
+                    if (last_layer && !document.getElementById("overlay").checked) {
+                        map.removeLayer(last_layer);
+                    }
+                    const color = getRandomColor();
+                    last_layer = L.geoJSON(geojson,{
+                        onEachFeature: onEachFeature, 
+                        style: {color: color},
+                        pointToLayer: function (feature, latlng) {
+                            const c = feature.properties.start ? "green" : "red";
+                            return L.circleMarker(latlng, {radius: 6, "fillOpacity": 0.8, fillColor: c});
+                        }
+                    }).addTo(map); 
+                })
+            }
+            function download() {
+                var element = document.createElement('a');
+                element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(last_geojson));
+                element.setAttribute('download', "data.geojson");
+
+                element.style.display = 'none';
+                document.body.appendChild(element);
+
+                element.click();
+
+                document.body.removeChild(element);
+            }
+        </script>
+    </body>
+</html>
